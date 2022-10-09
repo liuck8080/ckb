@@ -53,43 +53,41 @@ pub use primitive::{
 };
 pub use serde::{Deserialize, Serialize};
 
+use ckb_types::bytes::Bytes;
+
+/// The enum `Either` with variants `Left` and `Right` is a general purpose
+/// sum type with two cases.
+#[derive(PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Either<L, R> {
+    /// A value of type `L`.
+    Left(L),
+    /// A value of type `R`.
+    Right(R),
+}
+
 /// This is a wrapper for JSON serialization to select the format between Json and Hex.
 ///
 /// ## Examples
 ///
-/// `ResponseFormat<BlockView, Block>` returns the block in its Json format or molecule serialized
+/// `ResponseFormat<BlockView>` returns the block in its Json format or molecule serialized
 /// Hex format.
-pub enum ResponseFormat<V, P> {
-    /// Serializes `V` as Json
-    Json(V),
-    /// Serializes `P` as Hex.
-    ///
-    /// `P` is first serialized by molecule into binary.
-    ///
-    /// The binary is then encoded as a 0x-prefixed hex string.
-    Hex(P),
+#[derive(PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ResponseFormat<V> {
+    inner: Either<V, JsonBytes>,
 }
 
-impl<V, P> Serialize for ResponseFormat<V, P>
-where
-    V: Serialize,
-    P: ckb_types::prelude::Entity,
-{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match self {
-            ResponseFormat::Json(view) => view.serialize(serializer),
-            ResponseFormat::Hex(packed) => {
-                let slice = packed.as_slice();
-                let mut dst = vec![0u8; slice.len() * 2 + 2];
-                dst[0] = b'0';
-                dst[1] = b'x';
-                faster_hex::hex_encode(slice, &mut dst[2..])
-                    .map_err(|e| serde::ser::Error::custom(&format!("{}", e)))?;
-                serializer.serialize_str(unsafe { ::std::str::from_utf8_unchecked(&dst) })
-            }
+impl<V> ResponseFormat<V> {
+    pub fn json(json: V) -> Self {
+        ResponseFormat {
+            inner: Either::Left(json),
+        }
+    }
+
+    pub fn hex(raw: Bytes) -> Self {
+        ResponseFormat {
+            inner: Either::Right(JsonBytes::from_bytes(raw)),
         }
     }
 }

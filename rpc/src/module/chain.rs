@@ -11,7 +11,7 @@ use ckb_store::ChainStore;
 use ckb_traits::HeaderProvider;
 use ckb_types::{
     core::{self, cell::CellProvider},
-    packed::{self, Block, Header},
+    packed,
     prelude::*,
     utilities::{merkle_root, MerkleProof, CBMT},
     H256,
@@ -158,7 +158,7 @@ pub trait ChainRpc {
         &self,
         block_hash: H256,
         verbosity: Option<Uint32>,
-    ) -> Result<Option<ResponseFormat<BlockView, Block>>>;
+    ) -> Result<Option<ResponseFormat<BlockView>>>;
 
     /// Returns the block in the [canonical chain](#canonical-chain) with the specific block number.
     ///
@@ -277,7 +277,7 @@ pub trait ChainRpc {
         &self,
         block_number: BlockNumber,
         verbosity: Option<Uint32>,
-    ) -> Result<Option<ResponseFormat<BlockView, Block>>>;
+    ) -> Result<Option<ResponseFormat<BlockView>>>;
 
     /// Returns the information about a block header by hash.
     ///
@@ -355,7 +355,7 @@ pub trait ChainRpc {
         &self,
         block_hash: H256,
         verbosity: Option<Uint32>,
-    ) -> Result<Option<ResponseFormat<HeaderView, Header>>>;
+    ) -> Result<Option<ResponseFormat<HeaderView>>>;
 
     /// Returns the block header in the [canonical chain](#canonical-chain) with the specific block
     /// number.
@@ -436,7 +436,7 @@ pub trait ChainRpc {
         &self,
         block_number: BlockNumber,
         verbosity: Option<Uint32>,
-    ) -> Result<Option<ResponseFormat<HeaderView, Header>>>;
+    ) -> Result<Option<ResponseFormat<HeaderView>>>;
 
     /// Returns the information about a transaction requested by transaction hash.
     ///
@@ -646,10 +646,7 @@ pub trait ChainRpc {
     /// }
     /// ```
     #[rpc(name = "get_tip_header")]
-    fn get_tip_header(
-        &self,
-        verbosity: Option<Uint32>,
-    ) -> Result<ResponseFormat<HeaderView, Header>>;
+    fn get_tip_header(&self, verbosity: Option<Uint32>) -> Result<ResponseFormat<HeaderView>>;
 
     /// Returns the status of a cell. The RPC returns extra information if it is a [live cell](#live-cell).
     ///
@@ -1093,7 +1090,7 @@ pub trait ChainRpc {
         &self,
         block_hash: H256,
         verbosity: Option<Uint32>,
-    ) -> Result<Option<ResponseFormat<BlockView, Block>>>;
+    ) -> Result<Option<ResponseFormat<BlockView>>>;
 
     /// Return various consensus parameters.
     ///
@@ -1221,7 +1218,7 @@ impl ChainRpc for ChainRpcImpl {
         &self,
         block_hash: H256,
         verbosity: Option<Uint32>,
-    ) -> Result<Option<ResponseFormat<BlockView, Block>>> {
+    ) -> Result<Option<ResponseFormat<BlockView>>> {
         let snapshot = self.shared.snapshot();
         let block_hash = block_hash.pack();
         if !snapshot.is_main_chain(&block_hash) {
@@ -1235,11 +1232,11 @@ impl ChainRpc for ChainRpcImpl {
         if verbosity == 2 {
             Ok(snapshot
                 .get_block(&block_hash)
-                .map(|block| ResponseFormat::Json(block.into())))
+                .map(|block| ResponseFormat::json(block.into())))
         } else if verbosity == 0 {
             Ok(snapshot
                 .get_packed_block(&block_hash)
-                .map(ResponseFormat::Hex))
+                .map(|packed| ResponseFormat::hex(packed.as_bytes())))
         } else {
             Err(RPCError::invalid_params("invalid verbosity level"))
         }
@@ -1249,7 +1246,7 @@ impl ChainRpc for ChainRpcImpl {
         &self,
         block_number: BlockNumber,
         verbosity: Option<Uint32>,
-    ) -> Result<Option<ResponseFormat<BlockView, Block>>> {
+    ) -> Result<Option<ResponseFormat<BlockView>>> {
         let snapshot = self.shared.snapshot();
         let block_hash = match snapshot.get_block_hash(block_number.into()) {
             Some(block_hash) => block_hash,
@@ -1263,11 +1260,11 @@ impl ChainRpc for ChainRpcImpl {
         let result = if verbosity == 2 {
             snapshot
                 .get_block(&block_hash)
-                .map(|block| Some(ResponseFormat::Json(block.into())))
+                .map(|block| Some(ResponseFormat::json(block.into())))
         } else if verbosity == 0 {
             snapshot
                 .get_packed_block(&block_hash)
-                .map(|block| Some(ResponseFormat::Hex(block)))
+                .map(|block| Some(ResponseFormat::hex(block.as_bytes())))
         } else {
             return Err(RPCError::invalid_params("invalid verbosity level"));
         };
@@ -1286,7 +1283,7 @@ impl ChainRpc for ChainRpcImpl {
         &self,
         block_hash: H256,
         verbosity: Option<Uint32>,
-    ) -> Result<Option<ResponseFormat<HeaderView, Header>>> {
+    ) -> Result<Option<ResponseFormat<HeaderView>>> {
         let snapshot = self.shared.snapshot();
         let block_hash = block_hash.pack();
         if !snapshot.is_main_chain(&block_hash) {
@@ -1299,11 +1296,11 @@ impl ChainRpc for ChainRpcImpl {
         if verbosity == 1 {
             Ok(snapshot
                 .get_block_header(&block_hash)
-                .map(|header| ResponseFormat::Json(header.into())))
+                .map(|header| ResponseFormat::json(header.into())))
         } else if verbosity == 0 {
             Ok(snapshot
                 .get_packed_block_header(&block_hash)
-                .map(ResponseFormat::Hex))
+                .map(|packed| ResponseFormat::hex(packed.as_bytes())))
         } else {
             Err(RPCError::invalid_params("invalid verbosity level"))
         }
@@ -1313,7 +1310,7 @@ impl ChainRpc for ChainRpcImpl {
         &self,
         block_number: BlockNumber,
         verbosity: Option<Uint32>,
-    ) -> Result<Option<ResponseFormat<HeaderView, Header>>> {
+    ) -> Result<Option<ResponseFormat<HeaderView>>> {
         let snapshot = self.shared.snapshot();
         let block_hash = match snapshot.get_block_hash(block_number.into()) {
             Some(block_hash) => block_hash,
@@ -1326,11 +1323,11 @@ impl ChainRpc for ChainRpcImpl {
         let result = if verbosity == 1 {
             snapshot
                 .get_block_header(&block_hash)
-                .map(|header| Some(ResponseFormat::Json(header.into())))
+                .map(|header| Some(ResponseFormat::json(header.into())))
         } else if verbosity == 0 {
             snapshot
                 .get_packed_block_header(&block_hash)
-                .map(|header| Some(ResponseFormat::Hex(header)))
+                .map(|header| Some(ResponseFormat::hex(header.as_bytes())))
         } else {
             return Err(RPCError::invalid_params("invalid verbosity level"));
         };
@@ -1383,20 +1380,17 @@ impl ChainRpc for ChainRpcImpl {
             .map(|h| h.unpack()))
     }
 
-    fn get_tip_header(
-        &self,
-        verbosity: Option<Uint32>,
-    ) -> Result<ResponseFormat<HeaderView, Header>> {
+    fn get_tip_header(&self, verbosity: Option<Uint32>) -> Result<ResponseFormat<HeaderView>> {
         let verbosity = verbosity
             .map(|v| v.value())
             .unwrap_or(DEFAULT_HEADER_VERBOSITY_LEVEL);
         if verbosity == 1 {
-            Ok(ResponseFormat::Json(
+            Ok(ResponseFormat::json(
                 self.shared.snapshot().tip_header().clone().into(),
             ))
         } else if verbosity == 0 {
-            Ok(ResponseFormat::Hex(
-                self.shared.snapshot().tip_header().data(),
+            Ok(ResponseFormat::hex(
+                self.shared.snapshot().tip_header().data().as_bytes(),
             ))
         } else {
             Err(RPCError::invalid_params("invalid verbosity level"))
@@ -1622,7 +1616,7 @@ impl ChainRpc for ChainRpcImpl {
         &self,
         block_hash: H256,
         verbosity: Option<Uint32>,
-    ) -> Result<Option<ResponseFormat<BlockView, Block>>> {
+    ) -> Result<Option<ResponseFormat<BlockView>>> {
         let snapshot = self.shared.snapshot();
         let block_hash = block_hash.pack();
         if snapshot.is_main_chain(&block_hash) {
@@ -1636,11 +1630,11 @@ impl ChainRpc for ChainRpcImpl {
         if verbosity == 2 {
             Ok(snapshot
                 .get_block(&block_hash)
-                .map(|block| ResponseFormat::Json(block.into())))
+                .map(|block| ResponseFormat::json(block.into())))
         } else if verbosity == 0 {
             Ok(snapshot
                 .get_packed_block(&block_hash)
-                .map(ResponseFormat::Hex))
+                .map(|packed| ResponseFormat::hex(packed.as_bytes())))
         } else {
             Err(RPCError::invalid_params("invalid verbosity level"))
         }
